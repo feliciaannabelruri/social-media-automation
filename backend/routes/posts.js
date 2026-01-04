@@ -3,7 +3,6 @@ const router = express.Router();
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
-const { postToInstagram, postToTikTok } = require('../services/socialMedia');
 const Account = require('../models/Account');
 const logger = require('../utils/logger');
 
@@ -50,10 +49,13 @@ const upload = multer({
 // ============================================
 router.post('/create', upload.single('media'), async (req, res) => {
   try {
+    logger.info('Post create request received');
+    
     const { caption, accountIds } = req.body;
     
-    // Validate input
+    // Validation
     if (!caption) {
+      logger.warning('Caption is missing');
       return res.status(400).json({
         success: false,
         error: 'Caption is required'
@@ -61,6 +63,7 @@ router.post('/create', upload.single('media'), async (req, res) => {
     }
     
     if (!req.file) {
+      logger.warning('Media file is missing');
       return res.status(400).json({
         success: false,
         error: 'Media file is required'
@@ -68,6 +71,7 @@ router.post('/create', upload.single('media'), async (req, res) => {
     }
     
     if (!accountIds) {
+      logger.warning('No accounts selected');
       return res.status(400).json({
         success: false,
         error: 'At least one account must be selected'
@@ -77,7 +81,7 @@ router.post('/create', upload.single('media'), async (req, res) => {
     const mediaPath = req.file.path;
     const accounts = JSON.parse(accountIds);
     
-    logger.info(`Starting post creation for ${accounts.length} accounts`);
+    logger.info(`Processing post for ${accounts.length} accounts`);
     logger.info(`Caption: ${caption.substring(0, 50)}...`);
     logger.info(`Media: ${req.file.filename}`);
     
@@ -103,58 +107,32 @@ router.post('/create', upload.single('media'), async (req, res) => {
         
         // Post to Instagram if enabled
         if (account.instagram && account.instagram.enabled) {
-          logger.info(`Posting to Instagram for ${account.name}`);
+          logger.info(`Instagram posting for ${account.name} - SIMULATED`);
           
-          try {
-            const igResult = await postToInstagram(accountId, mediaPath, caption);
-            results.push({
-              accountId,
-              accountName: account.name,
-              platform: 'Instagram',
-              username: account.instagram.username,
-              ...igResult
-            });
-            
-            logger.info(`Instagram result for ${account.name}: ${igResult.success ? 'SUCCESS' : 'FAILED'}`);
-          } catch (error) {
-            logger.error(`Instagram error for ${account.name}: ${error.message}`);
-            results.push({
-              accountId,
-              accountName: account.name,
-              platform: 'Instagram',
-              username: account.instagram.username,
-              success: false,
-              message: error.message
-            });
-          }
+          // SIMULATED - Real implementation would use Instagram API
+          results.push({
+            accountId,
+            accountName: account.name,
+            platform: 'Instagram',
+            username: account.instagram.username,
+            success: true,
+            message: 'Posted successfully (simulated)'
+          });
         }
         
         // Post to TikTok if enabled
         if (account.tiktok && account.tiktok.enabled) {
-          logger.info(`Posting to TikTok for ${account.name}`);
+          logger.info(`TikTok posting for ${account.name} - SIMULATED`);
           
-          try {
-            const ttResult = await postToTikTok(accountId, mediaPath, caption);
-            results.push({
-              accountId,
-              accountName: account.name,
-              platform: 'TikTok',
-              username: account.tiktok.username,
-              ...ttResult
-            });
-            
-            logger.info(`TikTok result for ${account.name}: ${ttResult.success ? 'SUCCESS' : 'FAILED'}`);
-          } catch (error) {
-            logger.error(`TikTok error for ${account.name}: ${error.message}`);
-            results.push({
-              accountId,
-              accountName: account.name,
-              platform: 'TikTok',
-              username: account.tiktok.username,
-              success: false,
-              message: error.message
-            });
-          }
+          // SIMULATED - Real implementation would use TikTok API
+          results.push({
+            accountId,
+            accountName: account.name,
+            platform: 'TikTok',
+            username: account.tiktok.username,
+            success: true,
+            message: 'Posted successfully (simulated)'
+          });
         }
         
       } catch (error) {
@@ -166,10 +144,6 @@ router.post('/create', upload.single('media'), async (req, res) => {
         });
       }
     }
-    
-    // Clean up uploaded file after processing
-    // Uncomment if you want to delete file after posting
-    // fs.unlinkSync(mediaPath);
     
     logger.success('Post creation completed');
     
@@ -205,88 +179,9 @@ router.post('/create', upload.single('media'), async (req, res) => {
 // ============================================
 router.get('/history', async (req, res) => {
   try {
-    // This is a placeholder
-    // You would need to create a Post model to store history
     res.json({
       success: true,
       history: []
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
-  }
-});
-
-// ============================================
-// POST /api/posts/schedule
-// Schedule a post for later
-// ============================================
-router.post('/schedule', upload.single('media'), async (req, res) => {
-  try {
-    const { caption, accountIds, scheduleTime } = req.body;
-    
-    // Validate input
-    if (!caption || !req.file || !accountIds || !scheduleTime) {
-      return res.status(400).json({
-        success: false,
-        error: 'All fields are required'
-      });
-    }
-    
-    logger.info(`Scheduling post for ${scheduleTime}`);
-    
-    // Here you would implement scheduling logic
-    // Using node-cron or similar
-    
-    res.json({
-      success: true,
-      message: 'Post scheduled successfully',
-      scheduleTime: scheduleTime
-    });
-    
-  } catch (error) {
-    logger.error(`Schedule error: ${error.message}`);
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
-  }
-});
-
-// ============================================
-// GET /api/posts/scheduled
-// Get all scheduled posts
-// ============================================
-router.get('/scheduled', async (req, res) => {
-  try {
-    // Placeholder for scheduled posts
-    res.json({
-      success: true,
-      scheduled: []
-    });
-  } catch (error) {
-    res.status(500).json({
-      success: false,
-      error: error.message
-    });
-  }
-});
-
-// ============================================
-// DELETE /api/posts/scheduled/:id
-// Cancel a scheduled post
-// ============================================
-router.delete('/scheduled/:id', async (req, res) => {
-  try {
-    const { id } = req.params;
-    
-    logger.info(`Cancelling scheduled post: ${id}`);
-    
-    res.json({
-      success: true,
-      message: 'Scheduled post cancelled'
     });
   } catch (error) {
     res.status(500).json({
