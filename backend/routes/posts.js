@@ -1,9 +1,12 @@
+// FILE: backend/routes/posts.js
 const express = require('express');
 const router = express.Router();
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const Account = require('../models/Account');
+const instagramService = require('../services/instagramService');
+const tiktokService = require('../services/tiktokService');
 const logger = require('../utils/logger');
 
 // Configure multer for file upload
@@ -11,7 +14,6 @@ const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     const uploadDir = path.join(__dirname, '../uploads');
     
-    // Create uploads directory if not exists
     if (!fs.existsSync(uploadDir)) {
       fs.mkdirSync(uploadDir, { recursive: true });
     }
@@ -30,7 +32,6 @@ const upload = multer({
     fileSize: 100 * 1024 * 1024 // 100MB limit
   },
   fileFilter: (req, file, cb) => {
-    // Accept images and videos only
     const allowedTypes = /jpeg|jpg|png|gif|mp4|mov|avi|mkv/;
     const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
     const mimetype = allowedTypes.test(file.mimetype);
@@ -45,11 +46,13 @@ const upload = multer({
 
 // ============================================
 // POST /api/posts/create
-// Create and post content to social media
+// REAL posting to Instagram & TikTok
 // ============================================
 router.post('/create', upload.single('media'), async (req, res) => {
   try {
-    logger.info('Post create request received');
+    logger.info('========================================');
+    logger.info('🚀 REAL Post Request Received');
+    logger.info('========================================');
     
     const { caption, accountIds } = req.body;
     
@@ -81,9 +84,10 @@ router.post('/create', upload.single('media'), async (req, res) => {
     const mediaPath = req.file.path;
     const accounts = JSON.parse(accountIds);
     
-    logger.info(`Processing post for ${accounts.length} accounts`);
+    logger.info(`Processing REAL post for ${accounts.length} accounts`);
     logger.info(`Caption: ${caption.substring(0, 50)}...`);
     logger.info(`Media: ${req.file.filename}`);
+    logger.info(`File size: ${(req.file.size / 1024 / 1024).toFixed(2)} MB`);
     
     const results = [];
     
@@ -105,34 +109,120 @@ router.post('/create', upload.single('media'), async (req, res) => {
         
         logger.info(`Processing account: ${account.name}`);
         
-        // Post to Instagram if enabled
+        // ============================================
+        // REAL INSTAGRAM POSTING
+        // ============================================
         if (account.instagram && account.instagram.enabled) {
-          logger.info(`Instagram posting for ${account.name} - SIMULATED`);
+          logger.info(`🔵 REAL Instagram posting for @${account.instagram.username}...`);
           
-          // SIMULATED - Real implementation would use Instagram API
-          results.push({
-            accountId,
-            accountName: account.name,
-            platform: 'Instagram',
-            username: account.instagram.username,
-            success: true,
-            message: 'Posted successfully (simulated)'
-          });
+          try {
+            const igResult = await instagramService.postMedia(
+              account,
+              mediaPath,
+              caption
+            );
+            
+            if (igResult.success) {
+              logger.success(`✓ Instagram posted: ${igResult.url}`);
+              results.push({
+                accountId,
+                accountName: account.name,
+                platform: 'Instagram',
+                username: account.instagram.username,
+                success: true,
+                message: 'Posted successfully',
+                url: igResult.url,
+                postId: igResult.postId
+              });
+            } else {
+              logger.error(`✗ Instagram failed: ${igResult.error}`);
+              results.push({
+                accountId,
+                accountName: account.name,
+                platform: 'Instagram',
+                username: account.instagram.username,
+                success: false,
+                message: igResult.error,
+                needsChallenge: igResult.needsChallenge,
+                needsVerification: igResult.needsVerification
+              });
+            }
+          } catch (error) {
+            logger.error(`Instagram exception: ${error.message}`);
+            results.push({
+              accountId,
+              accountName: account.name,
+              platform: 'Instagram',
+              username: account.instagram.username,
+              success: false,
+              message: error.message
+            });
+          }
         }
         
-        // Post to TikTok if enabled
+        // ============================================
+        // REAL TIKTOK POSTING
+        // ============================================
         if (account.tiktok && account.tiktok.enabled) {
-          logger.info(`TikTok posting for ${account.name} - SIMULATED`);
+          // Check if file is video FIRST
+          const isVideo = /\.(mp4|mov|avi|mkv)$/i.test(req.file.filename);
           
-          // SIMULATED - Real implementation would use TikTok API
-          results.push({
-            accountId,
-            accountName: account.name,
-            platform: 'TikTok',
-            username: account.tiktok.username,
-            success: true,
-            message: 'Posted successfully (simulated)'
-          });
+          if (!isVideo) {
+            logger.warning(`⏭️  Skipping TikTok for @${account.tiktok.username} - Image not supported (TikTok only accepts video)`);
+            results.push({
+              accountId,
+              accountName: account.name,
+              platform: 'TikTok',
+              username: account.tiktok.username,
+              success: false,
+              message: 'Skipped - TikTok only accepts video files (MP4, MOV, AVI, MKV)',
+              skipped: true
+            });
+            continue;
+          }
+          
+          logger.info(`🎵 REAL TikTok posting for @${account.tiktok.username}...`);
+          
+          try {
+            const ttResult = await tiktokService.postVideo(
+              account,
+              mediaPath,
+              caption
+            );
+            
+            if (ttResult.success) {
+              logger.success(`✓ TikTok posted successfully`);
+              results.push({
+                accountId,
+                accountName: account.name,
+                platform: 'TikTok',
+                username: account.tiktok.username,
+                success: true,
+                message: 'Posted successfully',
+                url: ttResult.url
+              });
+            } else {
+              logger.error(`✗ TikTok failed: ${ttResult.error}`);
+              results.push({
+                accountId,
+                accountName: account.name,
+                platform: 'TikTok',
+                username: account.tiktok.username,
+                success: false,
+                message: ttResult.error
+              });
+            }
+          } catch (error) {
+            logger.error(`TikTok exception: ${error.message}`);
+            results.push({
+              accountId,
+              accountName: account.name,
+              platform: 'TikTok',
+              username: account.tiktok.username,
+              success: false,
+              message: error.message
+            });
+          }
         }
         
       } catch (error) {
@@ -145,7 +235,11 @@ router.post('/create', upload.single('media'), async (req, res) => {
       }
     }
     
-    logger.success('Post creation completed');
+    logger.info('========================================');
+    logger.success(`🎉 REAL Posting completed`);
+    logger.info(`✓ Success: ${results.filter(r => r.success).length}`);
+    logger.info(`✗ Failed: ${results.filter(r => !r.success).length}`);
+    logger.info('========================================');
     
     res.json({
       success: true,
@@ -183,6 +277,62 @@ router.get('/history', async (req, res) => {
       success: true,
       history: []
     });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// ============================================
+// POST /api/posts/test-instagram
+// Test Instagram connection
+// ============================================
+router.post('/test-instagram', async (req, res) => {
+  try {
+    const { accountId } = req.body;
+    
+    const account = await Account.findById(accountId);
+    
+    if (!account || !account.instagram.enabled) {
+      return res.status(400).json({
+        success: false,
+        error: 'Account not found or Instagram not enabled'
+      });
+    }
+    
+    const result = await instagramService.login(account);
+    
+    res.json(result);
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// ============================================
+// POST /api/posts/test-tiktok
+// Test TikTok connection
+// ============================================
+router.post('/test-tiktok', async (req, res) => {
+  try {
+    const { accountId } = req.body;
+    
+    const account = await Account.findById(accountId);
+    
+    if (!account || !account.tiktok.enabled) {
+      return res.status(400).json({
+        success: false,
+        error: 'Account not found or TikTok not enabled'
+      });
+    }
+    
+    const result = await tiktokService.login(account);
+    
+    res.json(result);
   } catch (error) {
     res.status(500).json({
       success: false,
